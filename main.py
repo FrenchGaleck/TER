@@ -11,6 +11,7 @@ from sklearn.ensemble import RandomForestClassifier
 import time
 from sklearn.neural_network import MLPClassifier
 from sklearn.metrics import accuracy_score
+np.random.seed(42)
 
 pd.set_option('display.max_columns', None)
 # First, create a connection object that represents the database
@@ -473,9 +474,15 @@ leagues = {
 weights = [1,1,7,1, 1, 7, 1, 1, 1, 1, 5, 1, 1, 5]#1, 7, 1,
 
 scaler = StandardScaler()
+
+"""---------------------------------------------------------------------------------------------------------------------
+
+                                                KNN AVEC AFFICHAGE PROPRE
+
+------------------------------------------------------------------------------------------------------------------------
+""""""
 param_grid = {'n_neighbors': range(1, 200)}
 
-#'niv_dom', 'diff_niv', 'niv_ext',
 fig, ax = plt.subplots()
 
 for league, data in leagues.items():
@@ -516,8 +523,14 @@ ax.set_xlabel('Ligue')
 ax.set_ylabel('Accuracy')
 ax.set_title('Accuracy for Different Leagues with KNN')
 plt.show()
-fig, ax = plt.subplots()
+fig, ax = plt.subplots()"""
+"""---------------------------------------------------------------------------------------------------------------------
 
+                                  MLP AVEC AFFICHAGE 
+
+------------------------------------------------------------------------------------------------------------------------
+"""
+"""
 hidden_layer_sizes = [
     (100,),
     (100, 50),
@@ -558,6 +571,54 @@ for league, data in leagues.items():
 ax.set_xlabel('Ligue')
 ax.set_ylabel('Accuracy')
 ax.set_title('Accuracy for Different Leagues with MLP')
+plt.show()"""
+"""--------------------------------------------------------------------------------------------------------------------
+ 
+                                  RANDOM FOREST AVEC AFFICHAGE PROPRE
+
+---------------------------------------------------------------------------------------------------------------------"""
+
+fig, ax = plt.subplots()
+
+
+param_grid = {
+    'n_estimators': [250, 300, 350, 400, 500],
+    'max_depth': [3, 5],
+    'min_samples_split': [2,4,6,8],
+    'min_samples_leaf': [1, 2]
+}
+
+for league, data in leagues.items():
+    X = data[['niv_dom', 'niv_ext', 'diff_niv', 'forme_dom', 'forme_ext', 'forme_diff', 'moy_but_dom',
+              'moy_but_enc_dom', 'moy_but_ext', 'moy_but_enc_ext', 'difference', 'moyenne_points_dom',
+              'moyenne_points_ext', 'diff_point']]
+
+    X_scaled = scaler.fit_transform(X)
+    y = pd.DataFrame()
+    y['resultat'] = data.apply(lambda row: resultat_lettre(row), axis=1)
+    X_train, X_test, y_train, y_test = train_test_split(X_scaled, y.values.ravel(), test_size=0.25, random_state=42)
+
+    rf = RandomForestClassifier()
+
+    grid_search = GridSearchCV(rf, param_grid, cv=5, scoring='accuracy')
+    grid_search.fit(X_train, y_train)
+
+    best_params = grid_search.best_params_
+    best_rf = RandomForestClassifier(**best_params)
+    best_rf.fit(X_train, y_train)
+
+    test_score = best_rf.score(X_test, y_test)
+
+    print("Ligue:", league)
+    print("Meilleurs paramètres:", best_params)
+    print("Exactitude sur l'ensemble de test:", test_score)
+    print("------------------")
+    ax.bar(league, test_score)
+    ax.text(league, test_score + 0.01, str(round(test_score, 2)), ha='center', va='bottom')
+
+ax.set_xlabel('Ligue')
+ax.set_ylabel('Accuracy')
+ax.set_title('Accuracy for Different Leagues with Random Forest')
 plt.show()
 """
 
@@ -619,7 +680,7 @@ print("Meilleur nombre d'estimateurs trouvé:", best_estimators)
 print("Score de validation croisée:", best_score)
 print("Score sur l'ensemble de test:", test_score)
 """
-
+"""
 scaler = StandardScaler()
 X = match[['niv_dom','niv_ext','diff_niv','forme_dom', 'forme_ext', 'forme_diff', 'moy_but_dom',
               'moy_but_enc_dom', 'moy_but_ext', 'moy_but_enc_ext', 'difference', 'moyenne_points_dom',
@@ -633,7 +694,7 @@ activations = ['identity', 'logistic', 'tanh', 'relu']
 solvers = ['lbfgs', 'sgd', 'adam']
 
 accuracy_scores = np.zeros((len(activations), len(solvers)))
-"""
+
 for i, activation in enumerate(activations):
     for j, solver in enumerate(solvers):
         mlp = MLPClassifier(hidden_layer_sizes=(100, 50), activation=activation, solver=solver, max_iter=500, random_state=42)
