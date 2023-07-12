@@ -2,6 +2,7 @@ import sqlite3
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+
 from sklearn.decomposition import PCA
 from sklearn.model_selection import GridSearchCV
 from sklearn.neighbors import KNeighborsClassifier
@@ -11,6 +12,8 @@ from sklearn.ensemble import RandomForestClassifier
 import time
 from sklearn.neural_network import MLPClassifier
 from sklearn.metrics import accuracy_score
+from sklearn.naive_bayes import GaussianNB
+from sklearn.metrics import confusion_matrix
 np.random.seed(42)
 
 pd.set_option('display.max_columns', None)
@@ -581,17 +584,23 @@ plt.show()"""
 fig, ax = plt.subplots()
 
 
-param_grid = {
-    'n_estimators': [250, 300, 350, 400, 500],
-    'max_depth': [3, 5],
-    'min_samples_split': [2,4,6,8],
-    'min_samples_leaf': [1, 2]
-}
+best_params_ligue1 = {'max_depth': 2, 'min_samples_leaf': 2, 'min_samples_split': 8, 'n_estimators': 300}
+best_params_bundesliga = {'max_depth': 5, 'min_samples_leaf': 1, 'min_samples_split': 5, 'n_estimators': 350}
+best_params_liga = {'max_depth': 5, 'min_samples_leaf': 1, 'min_samples_split': 2, 'n_estimators': 400}
+best_params_serieA = {'max_depth': 4, 'min_samples_leaf': 1, 'min_samples_split': 4, 'n_estimators': 500}
+best_params_premierLeague = {'max_depth': 5, 'min_samples_leaf': 2, 'min_samples_split': 6, 'n_estimators': 250}
 
+
+accuracies = {'Ligue 1': {'H': [], 'D': [], 'A': []},
+              'Bundesliga': {'H': [], 'D': [], 'A': []},
+              'Liga': {'H': [], 'D': [], 'A': []},
+              'Serie A': {'H': [], 'D': [], 'A': []},
+              'Premier League': {'H': [], 'D': [], 'A': []}}
+confusion_matrices = []
 for league, data in leagues.items():
     X = data[['niv_dom', 'niv_ext', 'diff_niv', 'forme_dom', 'forme_ext', 'forme_diff', 'moy_but_dom',
               'moy_but_enc_dom', 'moy_but_ext', 'moy_but_enc_ext', 'difference', 'moyenne_points_dom',
-              'moyenne_points_ext', 'diff_point']]
+              'moyenne_points_ext', 'diff_point','stage']]
 
     X_scaled = scaler.fit_transform(X)
     y = pd.DataFrame()
@@ -600,26 +609,116 @@ for league, data in leagues.items():
 
     rf = RandomForestClassifier()
 
-    grid_search = GridSearchCV(rf, param_grid, cv=5, scoring='accuracy')
-    grid_search.fit(X_train, y_train)
+    rf = RandomForestClassifier()
 
-    best_params = grid_search.best_params_
-    best_rf = RandomForestClassifier(**best_params)
-    best_rf.fit(X_train, y_train)
+    if league == 'Ligue 1':
+        best_params = best_params_ligue1
+    elif league == 'Bundesliga':
+        best_params = best_params_bundesliga
+    elif league == 'Liga':
+        best_params = best_params_liga
+    elif league == 'Serie A':
+        best_params = best_params_serieA
+    elif league == 'Premier League':
+        best_params = best_params_premierLeague
 
-    test_score = best_rf.score(X_test, y_test)
+    model = RandomForestClassifier(**best_params)
+    model.fit(X_train, y_train)
+    feature_importance = model.feature_importances_
+    y_pred=model.predict(X_test)
+    test_score = model.score(X_test, y_test)
 
     print("Ligue:", league)
     print("Meilleurs paramètres:", best_params)
     print("Exactitude sur l'ensemble de test:", test_score)
     print("------------------")
-    ax.bar(league, test_score)
-    ax.text(league, test_score + 0.01, str(round(test_score, 2)), ha='center', va='bottom')
+    """-----------------------------ACCURACY PAR RESULTAT PAR CHAMP--------------------------------- """
 
-ax.set_xlabel('Ligue')
-ax.set_ylabel('Accuracy')
-ax.set_title('Accuracy for Different Leagues with Random Forest')
+
+    # Calcul des précisions par résultat
+    accuracies[league]['H'].append(accuracy_score(y_test[y_test == '3'], y_pred[y_test == '3']))
+    accuracies[league]['D'].append(accuracy_score(y_test[y_test == '1'], y_pred[y_test == '1']))
+    accuracies[league]['A'].append(accuracy_score(y_test[y_test == '0'], y_pred[y_test == '0']))
+
+    # Définir les classes possibles
+    classes = ['0', '1', '3']
+
+    # Calculer la matrice de confusion en spécifiant les classes
+    confusion = confusion_matrix(y_test, y_pred, labels=classes)
+
+    print("Matrice de confusion:")
+    print(confusion)
+    print("------------------")
+    confusion_matrices.append(confusion)
+
+# Préparation des données pour l'affichage
+labels = ['Victoire domicile', 'Match nul', 'Victoire extérieur']
+accuracies_list = np.transpose([accuracies[league]['H'], accuracies[league]['D'], accuracies[league]['A']] for league in accuracies)
+
+# Affichage des précisions par type de résultat pour chaque championnat
+fig, ax = plt.subplots()
+ax.boxplot(accuracies_list, labels=labels)
+ax.set_xlabel('Type de résultat')
+ax.set_ylabel('Précision')
+ax.set_title('Précision des prédictions par type de résultat et par championnat')
+plt.xticks(rotation=45)
 plt.show()
+fig, axes = plt.subplots(len(leagues), figsize=(8, 6 * len(leagues)))
+# Affichage des matrices de confusion pour chaque championnat
+for i, confusion_matrix in enumerate(confusion_matrices):
+    ax = axes[i]
+    im = ax.imshow(confusion_matrix, interpolation='nearest', cmap='Blues')
+    ax.set_xticks(np.arange(len(labels)))
+    ax.set_yticks(np.arange(len(labels)))
+    ax.set_xticklabels(labels)
+    ax.set_yticklabels(labels)
+    ax.set_xlabel('Prédiction')
+    ax.set_ylabel('Vraie étiquette')
+    ax.set_title("Matrice de confusion - " + list(leagues.keys())[i])
+    plt.colorbar(im, ax=ax)
+
+plt.tight_layout()
+plt.show()
+"""--------------------------PLOT LES ACCURACY PAR CHAMP ---------------------------------------
+
+    ax.bar(league, test_score)
+    ax.text(league, test_score + 0.01, str(round(test_score, 2)), ha='center', va='bottom')"""
+""""""    """---------------------------PLOT ACCURACY PAR JOURNEE ----------------------------------------
+    y_pred_with_resultat_journee = pd.DataFrame({'resultat_pred': y_pred, 'resultat': y_test, 'journée': X_test[:, -1]})
+
+    # Calculer l'exactitude par journée
+    accuracy_by_journee = y_pred_with_resultat_journee.groupby('journée').apply(lambda x: accuracy_score(x['resultat'], x['resultat_pred']))
+
+    # Afficher la courbe d'accuracy par journée
+    plt.plot(accuracy_by_journee.index, accuracy_by_journee.values, label=league)"""
+
+
+""""""   """ ---------------------------------PLOT LES DIFFERENTES CARACTERISTIQUES IMPORTANTE DANS LE RANDOM FOREST------------------
+    # on va trier les carectéristique par ordre d'importance
+    indices = np.argsort(feature_importance)[::-1]
+    features = X.columns[indices]
+    importance = feature_importance[indices]
+
+    # Tracez les caractéristiques les plus importantes
+    plt.figure(figsize=(10, 6))
+    plt.bar(range(len(importance)), importance)
+    plt.xticks(range(len(importance)), features, rotation=90)
+    plt.xlabel('Caractéristiques')
+    plt.ylabel('Importance')
+    plt.title('Importance des caractéristiques : Random Forest - {}'.format(league))
+    plt.show()"""
+
+
+
+"""ax.set_xlabel('Ligue')
+ax.set_ylabel('Accuracy')
+ax.set_title('Accuracy for Different Leagues with Random Forest')"""
+""" ----------------------------------------------calcul accuracy par journée par championnat*------------
+plt.xlabel('Journée')
+plt.ylabel('Accuracy')
+plt.title('Accuracy par journée pour chaque championnat')
+plt.legend()
+plt.show()"""
 """
 
 #on va choisir les colonnes les plus importantes pour le pca
@@ -761,3 +860,48 @@ print("Exactitude sur l'ensemble de test:", accuracy)
 
 # Meilleurs paramètres trouvés
 print("Meilleurs paramètres:", grid_search.best_params_)"""
+# Créer une figure pour afficher les résultats
+fig, ax = plt.subplots()
+
+# Parcourir chaque ligue
+for league, data in leagues.items():
+    X = data[['niv_dom', 'niv_ext', 'diff_niv', 'forme_dom', 'forme_ext', 'forme_diff', 'moy_but_dom',
+              'moy_but_enc_dom', 'moy_but_ext', 'moy_but_enc_ext', 'difference', 'moyenne_points_dom',
+              'moyenne_points_ext', 'diff_point']]
+
+    y = pd.DataFrame()
+    y['resultat'] = data.apply(lambda row: resultat_lettre(row), axis=1)
+    # Standardiser les caractéristiques
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+    X_scaled = X_scaled * weights
+
+    # Séparer les données en ensembles d'entraînement et de test
+    X_train, X_test, y_train, y_test = train_test_split(X_scaled, y.values.ravel(), test_size=0.25, random_state=42)
+
+    # Créer le modèle GaussianNB
+    model = GaussianNB()
+    model.fit(X_train, y_train)
+
+    # Prédire les résultats sur l'ensemble de test
+    y_pred = model.predict(X_test)
+
+    # Calculer l'exactitude
+    accuracy = accuracy_score(y_test, y_pred)
+
+    # Afficher les résultats
+    print("Ligue:", league)
+    print("Exactitude sur l'ensemble de test:", accuracy)
+    print("------------------")
+
+    # Ajouter la barre et le texte correspondant à l'exactitude sur la figure
+    ax.bar(league, accuracy)
+    ax.text(league, accuracy + 0.01, str(round(accuracy, 2)), ha='center', va='bottom')
+
+# Définir les étiquettes et le titre de la figure
+ax.set_xlabel('Ligue')
+ax.set_ylabel('Accuracy')
+ax.set_title('Accuracy for Different Leagues with GaussianNB')
+
+# Afficher la figure
+plt.show()
